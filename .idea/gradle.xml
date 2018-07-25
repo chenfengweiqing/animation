@@ -10,6 +10,7 @@
             <option value="$PROJECT_DIR$" />
             <option value="$PROJECT_DIR$/ActivityAnimation" />
             <option value="$PROJECT_DIR$/anima" />
+            <option value="$PROJECT_DIR$/animationview" />
           </set>
         </option>
         <option name="resolveModulePerSourceSet" value="false" />
