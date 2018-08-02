@@ -3,10 +3,10 @@
   <component name="ProjectModuleManager">
     <modules>
       <module fileurl="file://$PROJECT_DIR$/ActivityAnimation/ActivityAnimation.iml" filepath="$PROJECT_DIR$/ActivityAnimation/ActivityAnimation.iml" />
-      <module fileurl="file://$PROJECT_DIR$/Animation.iml" filepath="$PROJECT_DIR$/Animation.iml" />
       <module fileurl="file://$PROJECT_DIR$/anima/anima.iml" filepath="$PROJECT_DIR$/anima/anima.iml" />
+      <module fileurl="file://$PROJECT_DIR$/animation.iml" filepath="$PROJECT_DIR$/animation.iml" />
       <module fileurl="file://$PROJECT_DIR$/animationview/animationview.iml" filepath="$PROJECT_DIR$/animationview/animationview.iml" />
-      <module fileurl="file://$PROJECT_DIR$/ActivityAnimation/app.iml" filepath="$PROJECT_DIR$/ActivityAnimation/app.iml" />
+      <module fileurl="file://$PROJECT_DIR$/imageslide/imageslide.iml" filepath="$PROJECT_DIR$/imageslide/imageslide.iml" />
     </modules>
   </component>
 </project>
