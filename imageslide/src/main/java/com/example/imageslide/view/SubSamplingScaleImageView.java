@@ -423,6 +423,38 @@ public class SubSamplingScaleImageView extends View {
      *
      * @param imageSource Image source.
      */
+    public final void setTopImage(@NonNull ImageSource imageSource) {
+        if (imageSource == null) {
+            throw new NullPointerException("imageSource must not be null");
+        }
+        reset(true);
+        if (imageSource.getBitmap() != null && imageSource.getSRegion() != null) {
+            onImageLoaded(Bitmap.createBitmap(imageSource.getBitmap(), imageSource.getSRegion().left, imageSource.getSRegion().top, imageSource.getSRegion().width(), imageSource.getSRegion().height()), ORIENTATION_0, false);
+        } else if (imageSource.getBitmap() != null) {
+            onImageLoaded(imageSource.getBitmap(), ORIENTATION_0, imageSource.isCached());
+        } else {
+            sRegion = imageSource.getSRegion();
+            uri = imageSource.getUri();
+            if (uri == null && imageSource.getResource() != null) {
+                uri = Uri.parse(ContentResolver.SCHEME_ANDROID_RESOURCE + "://" + getContext().getPackageName() + "/" + imageSource.getResource());
+            }
+            if (imageSource.getTile() || sRegion != null) {
+                // Load the bitmap using tile decoding.
+                TilesInitTask task = new TilesInitTask(this, getContext(), regionDecoderFactory, uri);
+                execute(task);
+            } else {
+                // Load the bitmap as a single image.
+                BitmapLoadTask task = new BitmapLoadTask(this, getContext(), bitmapDecoderFactory, uri, false);
+                execute(task);
+            }
+        }
+    }
+
+    /**
+     * Set the image source from a bitmap, resource, asset, file or other URI.
+     *
+     * @param imageSource Image source.
+     */
     public final void setImage(@NonNull ImageSource imageSource) {
         setImage(imageSource, null, null);
     }
@@ -501,6 +533,8 @@ public class SubSamplingScaleImageView extends View {
                 execute(task);
             }
         }
+
+        Log.d("liao", "setImage: getBitmap "+imageSource.getBitmap()+" getSRegion "+imageSource.getSRegion());
 
         if (imageSource.getBitmap() != null && imageSource.getSRegion() != null) {
             onImageLoaded(Bitmap.createBitmap(imageSource.getBitmap(), imageSource.getSRegion().left, imageSource.getSRegion().top, imageSource.getSRegion().width(), imageSource.getSRegion().height()), ORIENTATION_0, false);

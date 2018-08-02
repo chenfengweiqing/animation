@@ -30,18 +30,6 @@ public class MainActivity extends AppCompatActivity {
         int maxMemory = (int) (Runtime.getRuntime().maxMemory() / 1024);
         float initScale = getInitImageScale();
         mImageView.setZoomEnabled(false);
-        mImageView.setOnStateChangedListener(new SubSamplingScaleImageView.OnStateChangedListener() {
-            @Override
-            public void onScaleChanged(float newScale, int origin) {
-                Log.d("liao", "onScaleChanged: newScale  " + newScale + " origin " + origin);
-            }
-
-            @Override
-            public void onCenterChanged(PointF newCenter, int origin) {
-
-            }
-        });
-
         mImageView.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
