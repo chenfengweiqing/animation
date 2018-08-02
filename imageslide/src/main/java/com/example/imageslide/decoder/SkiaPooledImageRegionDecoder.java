@@ -20,7 +20,7 @@ import android.support.annotation.Nullable;
 import android.text.TextUtils;
 import android.util.Log;
 
-import com.example.imageslide.view.SubsamplingScaleImageView;
+import com.example.imageslide.view.SubSamplingScaleImageView;
 
 import java.io.File;
 import java.io.FileFilter;
@@ -41,7 +41,7 @@ import static android.content.Context.ACTIVITY_SERVICE;
  * <p>
  * An implementation of {@link ImageRegionDecoder} using a pool of {@link BitmapRegionDecoder}s,
  * to provide true parallel loading of tiles. This is only effective if parallel loading has been
- * enabled in the view by calling {@link com.example.imageslide.view.SubsamplingScaleImageView#setExecutor(Executor)}
+ * enabled in the view by calling {@link com.example.imageslide.view.SubSamplingScaleImageView#setExecutor(Executor)}
  * with a multi-threaded {@link Executor} instance.
  * </p><p>
  * One decoder is initialised when the class is initialised. This is enough to decode base layer tiles.
@@ -85,7 +85,7 @@ public class SkiaPooledImageRegionDecoder implements ImageRegionDecoder {
 
     @SuppressWarnings({"WeakerAccess", "SameParameterValue"})
     public SkiaPooledImageRegionDecoder(@Nullable Bitmap.Config bitmapConfig) {
-        Bitmap.Config globalBitmapConfig = SubsamplingScaleImageView.getPreferredBitmapConfig();
+        Bitmap.Config globalBitmapConfig = SubSamplingScaleImageView.getPreferredBitmapConfig();
         if (bitmapConfig != null) {
             this.bitmapConfig = bitmapConfig;
         } else if (globalBitmapConfig != null) {

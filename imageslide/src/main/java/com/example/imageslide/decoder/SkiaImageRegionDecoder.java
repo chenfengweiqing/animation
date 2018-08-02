@@ -13,7 +13,7 @@ import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.text.TextUtils;
 
-import com.example.imageslide.view.SubsamplingScaleImageView;
+import com.example.imageslide.view.SubSamplingScaleImageView;
 
 import java.io.InputStream;
 import java.util.List;
@@ -51,7 +51,7 @@ public class SkiaImageRegionDecoder implements ImageRegionDecoder {
 
     @SuppressWarnings({"WeakerAccess", "SameParameterValue"})
     public SkiaImageRegionDecoder(@Nullable Bitmap.Config bitmapConfig) {
-        Bitmap.Config globalBitmapConfig = SubsamplingScaleImageView.getPreferredBitmapConfig();
+        Bitmap.Config globalBitmapConfig = SubSamplingScaleImageView.getPreferredBitmapConfig();
         if (bitmapConfig != null) {
             this.bitmapConfig = bitmapConfig;
         } else if (globalBitmapConfig != null) {

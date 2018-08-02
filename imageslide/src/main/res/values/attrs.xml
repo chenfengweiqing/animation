@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <declare-styleable name="SubsamplingScaleImageView">
+    <declare-styleable name="SubSamplingScaleImageView">
         <attr name="src" format="reference"/>
         <attr name="assetName" format="string"/>
         <attr name="panEnabled" format="boolean"/>

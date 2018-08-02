@@ -8,13 +8,11 @@ import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
 import android.view.WindowManager;
-import android.widget.ImageView;
-
 import com.example.imageslide.view.ImageSource;
-import com.example.imageslide.view.SubsamplingScaleImageView;
+import com.example.imageslide.view.SubSamplingScaleImageView;
 
 public class MainActivity extends AppCompatActivity {
-    private SubsamplingScaleImageView mImageView;
+    private SubSamplingScaleImageView mImageView;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -31,10 +29,8 @@ public class MainActivity extends AppCompatActivity {
         float getScaleY = mImageView.getScaleY();
         int maxMemory = (int) (Runtime.getRuntime().maxMemory() / 1024);
         float initScale = getInitImageScale();
-        mImageView.setQuickScaleEnabled(false);
-//        mImageView.setPanEnabled(false);
         mImageView.setZoomEnabled(false);
-        mImageView.setOnStateChangedListener(new SubsamplingScaleImageView.OnStateChangedListener() {
+        mImageView.setOnStateChangedListener(new SubSamplingScaleImageView.OnStateChangedListener() {
             @Override
             public void onScaleChanged(float newScale, int origin) {
                 Log.d("liao", "onScaleChanged: newScale  " + newScale + " origin " + origin);
