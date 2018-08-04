@@ -176,6 +176,9 @@ public class SubSamplingScaleImageView extends View {
     // Bitmap (preview or full image)
     private Bitmap bitmap;
 
+    // Bitmap (preview or full image)
+    private Bitmap topBitmap;
+
     // Whether the bitmap is a preview image
     private boolean bitmapIsPreview;
 
@@ -184,6 +187,7 @@ public class SubSamplingScaleImageView extends View {
 
     // Uri of full size image
     private Uri uri;
+    private Uri topUri;
 
     // Sample size used to display the whole image when fully zoomed out
     private int fullImageSampleSize;
@@ -192,7 +196,7 @@ public class SubSamplingScaleImageView extends View {
     private Map<Integer, List<Tile>> tileMap;
 
     // Overlay tile boundaries and other info
-    private boolean debug;
+    private boolean debug = true;
 
     // Image orientation setting
     private int orientation = ORIENTATION_0;
@@ -241,6 +245,7 @@ public class SubSamplingScaleImageView extends View {
     private PointF vTranslate;
     private PointF vTranslateStart;
     private PointF vTranslateBefore;
+    private int count = 1;
 
     // Source coordinate to center on, used when new position is set externally before view is ready
     private Float pendingScale;
@@ -250,7 +255,10 @@ public class SubSamplingScaleImageView extends View {
     // Source image dimensions and orientation - dimensions relate to the unrotated image
     private int sWidth;
     private int sHeight;
+    private int sTopWidth;
+    private int sTopHeight;
     private int sOrientation;
+    private Rect sTopRegion;
     private Rect sRegion;
     private Rect pRegion;
 
@@ -308,14 +316,17 @@ public class SubSamplingScaleImageView extends View {
 
     // Paint objects created once and reused for efficiency
     private Paint bitmapPaint;
+    private Paint topBitmapPaint;
     private Paint debugTextPaint;
     private Paint debugLinePaint;
     private Paint tileBgPaint;
+    private Paint topTileBgPaint;
 
     // Volatile fields used to reduce object creation
     private ScaleAndTranslate satTemp;
     private Matrix matrix;
     private RectF sRect;
+    private RectF sTopRect;
     private final float[] srcArray = new float[8];
     private final float[] dstArray = new float[8];
 
@@ -427,28 +438,92 @@ public class SubSamplingScaleImageView extends View {
         if (imageSource == null) {
             throw new NullPointerException("imageSource must not be null");
         }
-        reset(true);
         if (imageSource.getBitmap() != null && imageSource.getSRegion() != null) {
             onImageLoaded(Bitmap.createBitmap(imageSource.getBitmap(), imageSource.getSRegion().left, imageSource.getSRegion().top, imageSource.getSRegion().width(), imageSource.getSRegion().height()), ORIENTATION_0, false);
         } else if (imageSource.getBitmap() != null) {
             onImageLoaded(imageSource.getBitmap(), ORIENTATION_0, imageSource.isCached());
         } else {
-            sRegion = imageSource.getSRegion();
-            uri = imageSource.getUri();
-            if (uri == null && imageSource.getResource() != null) {
-                uri = Uri.parse(ContentResolver.SCHEME_ANDROID_RESOURCE + "://" + getContext().getPackageName() + "/" + imageSource.getResource());
+            sTopRegion = imageSource.getSRegion();
+            topUri = imageSource.getUri();
+            if (topUri == null && imageSource.getResource() != null) {
+                topUri = Uri.parse(ContentResolver.SCHEME_ANDROID_RESOURCE + "://" + getContext().getPackageName() + "/" + imageSource.getResource());
             }
-            if (imageSource.getTile() || sRegion != null) {
-                // Load the bitmap using tile decoding.
-                TilesInitTask task = new TilesInitTask(this, getContext(), regionDecoderFactory, uri);
-                execute(task);
-            } else {
-                // Load the bitmap as a single image.
-                BitmapLoadTask task = new BitmapLoadTask(this, getContext(), bitmapDecoderFactory, uri, false);
-                execute(task);
+            boolean tile = imageSource.getTile();
+            debug("setTopImage sRegion " + sRegion + " tile " + tile + " topUri " + topUri);
+            TopBitmapLoadTask task = new TopBitmapLoadTask(this, getContext(), bitmapDecoderFactory, topUri);
+            execute(task);
+        }
+    }
+
+    /**
+     * Async task used to load bitmap without blocking the UI thread.
+     */
+    private static class TopBitmapLoadTask extends AsyncTask<Void, Void, Integer> {
+        private final WeakReference<SubSamplingScaleImageView> viewRef;
+        private final WeakReference<Context> contextRef;
+        private final WeakReference<DecoderFactory<? extends ImageDecoder>> decoderFactoryRef;
+        private final Uri source;
+        private Bitmap bitmap;
+        private Exception exception;
+
+        TopBitmapLoadTask(SubSamplingScaleImageView view, Context context, DecoderFactory<? extends ImageDecoder> decoderFactory, Uri source) {
+            this.viewRef = new WeakReference<>(view);
+            this.contextRef = new WeakReference<>(context);
+            this.decoderFactoryRef = new WeakReference<DecoderFactory<? extends ImageDecoder>>(decoderFactory);
+            this.source = source;
+        }
+
+        @Override
+        protected Integer doInBackground(Void... params) {
+            try {
+                String sourceUri = source.toString();
+                Context context = contextRef.get();
+                DecoderFactory<? extends ImageDecoder> decoderFactory = decoderFactoryRef.get();
+                SubSamplingScaleImageView view = viewRef.get();
+                if (context != null && decoderFactory != null && view != null) {
+                    view.debug("BitmapLoadTask.doInBackground");
+                    bitmap = decoderFactory.make().decode(context, source);
+                    return view.getExifOrientation(context, sourceUri);
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "Failed to load bitmap", e);
+                this.exception = e;
+            } catch (OutOfMemoryError e) {
+                Log.e(TAG, "Failed to load bitmap - OutOfMemoryError", e);
+                this.exception = new RuntimeException(e);
+            }
+            return null;
+        }
+
+        @Override
+        protected void onPostExecute(Integer orientation) {
+            SubSamplingScaleImageView subSamplingScaleImageView = viewRef.get();
+            if (subSamplingScaleImageView != null) {
+                if (bitmap != null && orientation != null) {
+                    subSamplingScaleImageView.onTopImageLoaded(bitmap, orientation);
+                } else if (exception != null && subSamplingScaleImageView.onImageEventListener != null) {
+                    subSamplingScaleImageView.onImageEventListener.onImageLoadError(exception);
+                }
             }
         }
     }
+
+    /**
+     * Called by worker task when full size image bitmap is ready (tiling is disabled).
+     */
+    private synchronized void onTopImageLoaded(Bitmap bitmap, int sOrientation) {
+        debug("onTopImageLoaded sTopWidth " + sTopWidth + " bitmap width " + bitmap.getWidth() + " sTopHeight " +
+                sTopHeight + " bitmap height " + bitmap.getHeight() + " this.topBitmap " + this.topBitmap);
+        if (this.topBitmap != null) {
+            this.topBitmap.recycle();
+        }
+        this.topBitmap = bitmap;
+        this.sTopWidth = bitmap.getWidth();
+        this.sTopHeight = bitmap.getHeight();
+        invalidate();
+        requestLayout();
+    }
+
 
     /**
      * Set the image source from a bitmap, resource, asset, file or other URI.
@@ -534,8 +609,7 @@ public class SubSamplingScaleImageView extends View {
             }
         }
 
-        Log.d("liao", "setImage: getBitmap "+imageSource.getBitmap()+" getSRegion "+imageSource.getSRegion());
-
+        debug("setImage: getBitmap " + imageSource.getBitmap() + " getSRegion " + imageSource.getSRegion());
         if (imageSource.getBitmap() != null && imageSource.getSRegion() != null) {
             onImageLoaded(Bitmap.createBitmap(imageSource.getBitmap(), imageSource.getSRegion().left, imageSource.getSRegion().top, imageSource.getSRegion().width(), imageSource.getSRegion().height()), ORIENTATION_0, false);
         } else if (imageSource.getBitmap() != null) {
@@ -546,6 +620,7 @@ public class SubSamplingScaleImageView extends View {
             if (uri == null && imageSource.getResource() != null) {
                 uri = Uri.parse(ContentResolver.SCHEME_ANDROID_RESOURCE + "://" + getContext().getPackageName() + "/" + imageSource.getResource());
             }
+            debug("setImage: getTile " + imageSource.getTile() + " sRegion " + sRegion + " uri " + uri);
             if (imageSource.getTile() || sRegion != null) {
                 // Load the bitmap using tile decoding.
                 TilesInitTask task = new TilesInitTask(this, getContext(), regionDecoderFactory, uri);
@@ -562,7 +637,7 @@ public class SubSamplingScaleImageView extends View {
      * Reset all state before setting/changing image or setting new rotation.
      */
     private void reset(boolean newImage) {
-        debug("reset newImage=" + newImage);
+        debug("reset newImage " + newImage + " tileMap " + tileMap);
         scale = 0.6667f;
         scaleStart = 0f;
         vTranslate = null;
@@ -639,6 +714,7 @@ public class SubSamplingScaleImageView extends View {
                     PointF vTranslateEnd = new PointF(vTranslate.x + (velocityX * 0.25f), vTranslate.y + (velocityY * 0.25f));
                     float sCenterXEnd = ((getWidth() / 2) - vTranslateEnd.x) / scale;
                     float sCenterYEnd = ((getHeight() / 2) - vTranslateEnd.y) / scale;
+                    debug("setGestureDetector onFling sCenterXEnd " + sCenterXEnd + " sCenterYEnd " + sCenterYEnd + " new anim ");
                     new AnimationBuilder(new PointF(sCenterXEnd, sCenterYEnd)).withEasing(EASE_OUT_QUAD).withPanLimited(false).withOrigin(ORIGIN_FLING).start();
                     return true;
                 }
@@ -1052,6 +1128,7 @@ public class SubSamplingScaleImageView extends View {
      * quick scale is enabled.
      */
     private void doubleTapZoom(PointF sCenter, PointF vFocus) {
+        debug("doubleTapZoom panEnabled " + panEnabled);
         if (!panEnabled) {
             if (sRequestedCenter != null) {
                 // With a center specified from code, zoom around that point.
@@ -1066,6 +1143,7 @@ public class SubSamplingScaleImageView extends View {
         float doubleTapZoomScale = Math.min(maxScale, SubSamplingScaleImageView.this.doubleTapZoomScale);
         boolean zoomIn = (scale <= doubleTapZoomScale * 0.9) || scale == minScale;
         float targetScale = zoomIn ? doubleTapZoomScale : minScale();
+        debug("doubleTapZoom doubleTapZoomStyle " + doubleTapZoomStyle + " zoomIn " + zoomIn + " panEnabled " + panEnabled);
         if (doubleTapZoomStyle == ZOOM_FOCUS_CENTER_IMMEDIATE) {
             setScaleAndCenter(targetScale, sCenter);
         } else if (doubleTapZoomStyle == ZOOM_FOCUS_CENTER || !zoomIn || !panEnabled) {
@@ -1087,11 +1165,13 @@ public class SubSamplingScaleImageView extends View {
 
         // If image or view dimensions are not known yet, abort.
         if (sWidth == 0 || sHeight == 0 || getWidth() == 0 || getHeight() == 0) {
+            debug("onDraw sWidth is 0 ");
             return;
         }
 
         // When using tiles, on first render with no tile map ready, initialise it and kick off async base image loading.
         if (tileMap == null && decoder != null) {
+            debug("onDraw initialiseBaseLayer ");
             initialiseBaseLayer(getMaxBitmapDimensions(canvas));
         }
 
@@ -1099,15 +1179,20 @@ public class SubSamplingScaleImageView extends View {
         // dimensions and therefore the first opportunity to set scale and translate. If this call returns
         // false there is nothing to be drawn so return immediately.
         if (!checkReady()) {
+            debug("onDraw checkReady false ");
             return;
         }
 
         // Set scale and translate before draw.
         preDraw();
 
+        debug("onDraw anim  " + anim + " tileMap " + tileMap + " bitmap " + bitmap + " topBitmap " + topBitmap +
+                " bitmapIsPreview  " + bitmapIsPreview + " matrix " + matrix + " tileBgPaint " + tileBgPaint + " topTileBgPaint " +
+                topTileBgPaint + "  vTranslate " + vTranslate);
         // If animating scale, calculate current scale and center with easing equations
         if (anim != null && anim.vFocusStart != null) {
             // Store current values so we can send an event if they change
+            debug("onDraw anim  vFocusStart ");
             float scaleBefore = scale;
             if (vTranslateBefore == null) {
                 vTranslateBefore = new PointF(0, 0);
@@ -1142,6 +1227,8 @@ public class SubSamplingScaleImageView extends View {
             }
             invalidate();
         }
+
+        debug(" isBaseLayerReady " + isBaseLayerReady());
 
         if (tileMap != null && isBaseLayerReady()) {
 
@@ -1234,6 +1321,45 @@ public class SubSamplingScaleImageView extends View {
 
         }
 
+        if (topBitmap != null) {
+            float xScale = scale, yScale = scale;
+            if (bitmapIsPreview) {
+                xScale = scale * ((float) sTopWidth / topBitmap.getWidth());
+                yScale = scale * ((float) sTopHeight / topBitmap.getHeight());
+            }
+
+            if (matrix == null) {
+                matrix = new Matrix();
+            }
+            matrix.reset();
+            matrix.postScale(xScale, yScale);
+            matrix.postRotate(getRequiredRotation());
+            count++;
+            if (count > 10) {
+                count = 1;
+            }
+            matrix.postTranslate(vTranslate.x + 100 * count, vTranslate.y + 200);
+
+//            if (getRequiredRotation() == ORIENTATION_180) {
+//                matrix.postTranslate(scale * sWidth, scale * sHeight);
+//            } else if (getRequiredRotation() == ORIENTATION_90) {
+//                matrix.postTranslate(scale * sHeight, 0);
+//            } else if (getRequiredRotation() == ORIENTATION_270) {
+//                matrix.postTranslate(0, scale * sWidth);
+//            }
+
+            if (topTileBgPaint != null) {
+                if (sTopRect == null) {
+                    sTopRect = new RectF();
+                }
+                debug("onDraw topTileBgPaint  getAlpha " + topTileBgPaint.getAlpha());
+                sTopRect.set(0f, 0f, bitmapIsPreview ? topBitmap.getWidth() : sTopWidth, bitmapIsPreview ? topBitmap.getHeight() : sTopHeight);
+                matrix.mapRect(sTopRect);
+                canvas.drawRect(sTopRect, topTileBgPaint);
+            }
+            canvas.drawBitmap(topBitmap, matrix, topBitmapPaint);
+        }
+
         if (debug) {
             canvas.drawText("Scale: " + String.format(Locale.ENGLISH, "%.2f", scale) + " (" + String.format(Locale.ENGLISH, "%.2f", minScale()) + " - " + String.format(Locale.ENGLISH, "%.2f", maxScale) + ")", px(5), px(15), debugTextPaint);
             canvas.drawText("Translate: " + String.format(Locale.ENGLISH, "%.2f", vTranslate.x) + ":" + String.format(Locale.ENGLISH, "%.2f", vTranslate.y), px(5), px(30), debugTextPaint);
@@ -1314,6 +1440,7 @@ public class SubSamplingScaleImageView extends View {
      */
     private boolean checkReady() {
         boolean ready = getWidth() > 0 && getHeight() > 0 && sWidth > 0 && sHeight > 0 && (bitmap != null || isBaseLayerReady());
+        debug("checkReady readySent " + readySent + " ready " + ready);
         if (!readySent && ready) {
             preDraw();
             readySent = true;
@@ -1331,6 +1458,7 @@ public class SubSamplingScaleImageView extends View {
      */
     private boolean checkImageLoaded() {
         boolean imageLoaded = isBaseLayerReady();
+        debug("checkImageLoaded imageLoaded " + imageLoaded + " imageLoadedSent " + imageLoadedSent);
         if (!imageLoadedSent && imageLoaded) {
             preDraw();
             imageLoadedSent = true;
@@ -1352,6 +1480,13 @@ public class SubSamplingScaleImageView extends View {
             bitmapPaint.setFilterBitmap(true);
             bitmapPaint.setDither(true);
         }
+        if (topBitmapPaint == null) {
+            topBitmapPaint = new Paint();
+            topBitmapPaint.setAntiAlias(true);
+            topBitmapPaint.setFilterBitmap(true);
+            topBitmapPaint.setDither(true);
+//            topBitmapPaint.setAlpha(100);
+        }
         if ((debugTextPaint == null || debugLinePaint == null) && debug) {
             debugTextPaint = new Paint();
             debugTextPaint.setTextSize(px(12));
@@ -1369,8 +1504,6 @@ public class SubSamplingScaleImageView extends View {
      * the base layer image - the whole source subsampled as necessary.
      */
     private synchronized void initialiseBaseLayer(@NonNull Point maxTileDimensions) {
-        debug("initialiseBaseLayer maxTileDimensions=%dx%d", maxTileDimensions.x, maxTileDimensions.y);
-
         satTemp = new ScaleAndTranslate(0f, new PointF(0, 0));
         fitToBounds(true, satTemp);
 
@@ -1381,19 +1514,17 @@ public class SubSamplingScaleImageView extends View {
             fullImageSampleSize /= 2;
         }
 
+        debug("initialiseBaseLayer maxTileDimensions=%dx%d fullImageSampleSize %s  sRegion %s ",
+                maxTileDimensions.x, maxTileDimensions.y, fullImageSampleSize, sRegion);
         if (fullImageSampleSize == 1 && sRegion == null && sWidth() < maxTileDimensions.x && sHeight() < maxTileDimensions.y) {
-
             // Whole image is required at native resolution, and is smaller than the canvas max bitmap size.
             // Use BitmapDecoder for better image support.
             decoder.recycle();
             decoder = null;
             BitmapLoadTask task = new BitmapLoadTask(this, getContext(), bitmapDecoderFactory, uri, false);
             execute(task);
-
         } else {
-
             initialiseTileMap(maxTileDimensions);
-
             List<Tile> baseGrid = tileMap.get(fullImageSampleSize);
             for (Tile baseTile : baseGrid) {
                 TileLoadTask task = new TileLoadTask(this, decoder, baseTile);
@@ -1724,6 +1855,7 @@ public class SubSamplingScaleImageView extends View {
         debug("onTilesInited sWidth=%d, sHeight=%d, sOrientation=%d", sWidth, sHeight, orientation);
         // If actual dimensions don't match the declared size, reset everything.
         if (this.sWidth > 0 && this.sHeight > 0 && (this.sWidth != sWidth || this.sHeight != sHeight)) {
+            debug("onTilesInited reset");
             reset(false);
             if (bitmap != null) {
                 if (!bitmapIsCached) {
@@ -1926,7 +2058,8 @@ public class SubSamplingScaleImageView extends View {
      * Called by worker task when full size image bitmap is ready (tiling is disabled).
      */
     private synchronized void onImageLoaded(Bitmap bitmap, int sOrientation, boolean bitmapIsCached) {
-        debug("onImageLoaded");
+        debug("onImageLoaded sWidth " + sWidth + " bitmap width " + bitmap.getWidth() + " sHeight " +
+                sHeight + " bitmap height " + bitmap.getHeight() + " this.bitmap " + this.bitmap + " bitmapIsCached " + this.bitmapIsCached);
         // If actual dimensions don't match the declared size, reset everything.
         if (this.sWidth > 0 && this.sHeight > 0 && (this.sWidth != bitmap.getWidth() || this.sHeight != bitmap.getHeight())) {
             reset(false);
@@ -1947,6 +2080,7 @@ public class SubSamplingScaleImageView extends View {
         this.sOrientation = sOrientation;
         boolean ready = checkReady();
         boolean imageLoaded = checkImageLoaded();
+        debug("onImageLoaded  ready " + ready + " imageLoaded " + imageLoaded);
         if (ready || imageLoaded) {
             invalidate();
             requestLayout();
@@ -2167,6 +2301,8 @@ public class SubSamplingScaleImageView extends View {
         debugTextPaint = null;
         debugLinePaint = null;
         tileBgPaint = null;
+        topTileBgPaint = null;
+        topBitmapPaint = null;
     }
 
     /**
@@ -2927,10 +3063,15 @@ public class SubSamplingScaleImageView extends View {
     public final void setTileBackgroundColor(int tileBgColor) {
         if (Color.alpha(tileBgColor) == 0) {
             tileBgPaint = null;
+            topTileBgPaint = null;
         } else {
             tileBgPaint = new Paint();
             tileBgPaint.setStyle(Style.FILL);
             tileBgPaint.setColor(tileBgColor);
+            topTileBgPaint = new Paint();
+            topTileBgPaint.setStyle(Style.FILL);
+            topTileBgPaint.setColor(tileBgColor);
+            topTileBgPaint.setAlpha(0);
         }
         invalidate();
     }

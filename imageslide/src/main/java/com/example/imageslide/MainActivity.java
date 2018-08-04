@@ -2,12 +2,12 @@ package com.example.imageslide;
 
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
-import android.graphics.PointF;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
 import android.view.WindowManager;
+
 import com.example.imageslide.view.ImageSource;
 import com.example.imageslide.view.SubSamplingScaleImageView;
 
@@ -19,16 +19,10 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         mImageView = findViewById(R.id.imageView);
+        mImageView.setTopImage(ImageSource.resource(R.drawable.top));
         mImageView.setImage(ImageSource.resource(R.drawable.city));
         mImageView.setMaxScale(0.667f);
         mImageView.setMinScale(0.667f);
-        float getMaxScale = mImageView.getMaxScale();
-        float getMinScale = mImageView.getMinScale();
-        float getScale = mImageView.getScale();
-        float getScaleX = mImageView.getScaleX();
-        float getScaleY = mImageView.getScaleY();
-        int maxMemory = (int) (Runtime.getRuntime().maxMemory() / 1024);
-        float initScale = getInitImageScale();
         mImageView.setZoomEnabled(false);
         mImageView.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -36,8 +30,6 @@ public class MainActivity extends AppCompatActivity {
                 Log.d("liao", "setOnClickListener:   " + mImageView.getType());
             }
         });
-        Log.d("liao", "onCreate: maxMemory  " + maxMemory + " getMaxScale " + getMaxScale + "  getMinScale " + getMinScale
-                + " getScale " + getScale + " getScaleX " + getScaleX + "  getScaleY " + getScaleY + "  initScale " + initScale);
     }
 
     private float getInitImageScale() {
