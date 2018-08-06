@@ -2,9 +2,13 @@ package com.example.sampleimageslide.view;
 
 import android.content.ContentResolver;
 import android.content.Context;
+import android.content.pm.PackageManager;
+import android.content.res.Resources;
 import android.content.res.TypedArray;
 import android.database.Cursor;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.BitmapRegionDecoder;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Matrix;
@@ -23,6 +27,7 @@ import android.provider.MediaStore;
 import android.support.annotation.AnyThread;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
+import android.text.TextUtils;
 import android.util.AttributeSet;
 import android.util.DisplayMetrics;
 import android.util.Log;
@@ -33,8 +38,6 @@ import android.view.View;
 import android.view.ViewParent;
 
 import com.example.sampleimageslide.R.styleable;
-import com.example.sampleimageslide.decoder.SkiaImageDecoder;
-import com.example.sampleimageslide.decoder.SkiaImageRegionDecoder;
 
 import java.lang.ref.WeakReference;
 import java.util.Arrays;
@@ -64,7 +67,6 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 public class SimpleScaleImageView extends View {
 
     private static final String TAG = SimpleScaleImageView.class.getSimpleName();
-
     /**
      * Attempt to use EXIF information on the image to rotate it. Works for external files only.
      */
@@ -263,9 +265,6 @@ public class SimpleScaleImageView extends View {
     private GestureDetector singleDetector;
 
     private final ReadWriteLock decoderLock = new ReentrantReadWriteLock(true);
-    private SkiaImageDecoder skiaImageDecoder = new SkiaImageDecoder();
-    private SkiaImageRegionDecoder skiaImageRegionDecoder = new SkiaImageRegionDecoder();
-
     // Debug values
     private PointF vCenterStart;
     private float vDistStart;
@@ -346,7 +345,7 @@ public class SimpleScaleImageView extends View {
             if (typedAttr.hasValue(styleable.SubSamplingScaleImageView_src)) {
                 int resId = typedAttr.getResourceId(styleable.SubSamplingScaleImageView_src, 0);
                 if (resId > 0) {
-                    setImage(ImageSource.resource(resId).tilingEnabled());
+                    setImage(resId);
                 }
             }
             if (typedAttr.hasValue(styleable.SubSamplingScaleImageView_panEnabled)) {
@@ -408,20 +407,11 @@ public class SimpleScaleImageView extends View {
 
     /**
      * Set the image source from a bitmap, resource, asset, file or other URI.
-     *
-     * @param imageSource Image source.
      */
-    public final void setTopImage(@NonNull ImageSource imageSource) {
-        if (imageSource == null) {
-            throw new NullPointerException("imageSource must not be null");
-        }
-        topUri = imageSource.getUri();
-        if (topUri == null && imageSource.getResource() != null) {
-            topUri = Uri.parse(ContentResolver.SCHEME_ANDROID_RESOURCE + "://" + getContext().getPackageName() + "/" + imageSource.getResource());
-        }
-        boolean tile = imageSource.getTile();
+    public final void setTopImage(@NonNull int resId) {
+        topUri = Uri.parse(ContentResolver.SCHEME_ANDROID_RESOURCE + "://" + getContext().getPackageName() + "/" + resId);
 //        debug("setTopImage  tile " + tile + " topUri " + topUri);
-        BitmapLoadTask task = new BitmapLoadTask(this, getContext(), skiaImageDecoder, topUri, false, true);
+        BitmapLoadTask task = new BitmapLoadTask(this, getContext(), topUri, false, true);
         execute(task);
     }
 
@@ -444,29 +434,13 @@ public class SimpleScaleImageView extends View {
 
     /**
      * Set the image source from a bitmap, resource, asset, file or other URI.
-     *
-     * @param imageSource Image source.
      */
-    public final void setImage(@NonNull ImageSource imageSource) {
+    public final void setImage(@NonNull int resId) {
         //noinspection ConstantConditions
-        if (imageSource == null) {
-            throw new NullPointerException("imageSource must not be null");
-        }
         reset(true);
-        uri = imageSource.getUri();
-        if (uri == null && imageSource.getResource() != null) {
-            uri = Uri.parse(ContentResolver.SCHEME_ANDROID_RESOURCE + "://" + getContext().getPackageName() + "/" + imageSource.getResource());
-        }
-//        debug("setImage: getTile " + imageSource.getTile() + " uri " + uri);
-        if (imageSource.getTile()) {
-            // Load the bitmap using tile decoding.
-            TilesInitTask task = new TilesInitTask(this, getContext(), skiaImageRegionDecoder, uri);
-            execute(task);
-        } else {
-            // Load the bitmap as a single image.
-            BitmapLoadTask task = new BitmapLoadTask(this, getContext(), skiaImageDecoder, uri, false, false);
-            execute(task);
-        }
+        uri = Uri.parse(ContentResolver.SCHEME_ANDROID_RESOURCE + "://" + getContext().getPackageName() + "/" + resId);
+        TilesInitTask task = new TilesInitTask(this, getContext(), uri);
+        execute(task);
     }
 
     /**
@@ -1155,7 +1129,7 @@ public class SimpleScaleImageView extends View {
             // Whole image is required at native resolution, and is smaller than the canvas max bitmap size.
             // Use BitmapDecoder for better image support.
             initialiseBaseLayer = true;
-            BitmapLoadTask task = new BitmapLoadTask(this, getContext(), skiaImageDecoder, uri, false, false);
+            BitmapLoadTask task = new BitmapLoadTask(this, getContext(), uri, false, false);
             execute(task);
         }
     }
@@ -1308,14 +1282,12 @@ public class SimpleScaleImageView extends View {
     private static class TilesInitTask extends AsyncTask<Void, Void, int[]> {
         private final WeakReference<SimpleScaleImageView> viewRef;
         private final WeakReference<Context> contextRef;
-        private final WeakReference<SkiaImageRegionDecoder> skiaImageRegionDecoderRef;
         private final Uri source;
         private Exception exception;
 
-        TilesInitTask(SimpleScaleImageView view, Context context, SkiaImageRegionDecoder skiaImageRegionDecoder, Uri source) {
+        TilesInitTask(SimpleScaleImageView view, Context context, Uri source) {
             this.viewRef = new WeakReference<>(view);
             this.contextRef = new WeakReference<>(context);
-            this.skiaImageRegionDecoderRef = new WeakReference<>(skiaImageRegionDecoder);
             this.source = source;
         }
 
@@ -1324,11 +1296,33 @@ public class SimpleScaleImageView extends View {
             try {
                 String sourceUri = source.toString();
                 Context context = contextRef.get();
-                SkiaImageRegionDecoder decoderFactory = skiaImageRegionDecoderRef.get();
                 SimpleScaleImageView view = viewRef.get();
-                if (context != null && decoderFactory != null && view != null) {
+                if (context != null && view != null) {
 //                    view.debug("TilesInitTask.doInBackground");
-                    Point dimensions = decoderFactory.init(context, source);
+                    String uriString = source.toString();
+                    Resources res;
+                    String packageName = source.getAuthority();
+                    if (context.getPackageName().equals(packageName)) {
+                        res = context.getResources();
+                    } else {
+                        PackageManager pm = context.getPackageManager();
+                        res = pm.getResourcesForApplication(packageName);
+                    }
+
+                    int id = 0;
+                    List<String> segments = source.getPathSegments();
+                    int size = segments.size();
+                    if (size == 2 && segments.get(0).equals("drawable")) {
+                        String resName = segments.get(1);
+                        id = res.getIdentifier(resName, "drawable", packageName);
+                    } else if (size == 1 && TextUtils.isDigitsOnly(segments.get(0))) {
+                        try {
+                            id = Integer.parseInt(segments.get(0));
+                        } catch (NumberFormatException ignored) {
+                        }
+                    }
+                    BitmapRegionDecoder decoder = BitmapRegionDecoder.newInstance(context.getResources().openRawResource(id), false);
+                    Point dimensions = new Point(decoder.getWidth(), decoder.getHeight());
                     int sWidth = dimensions.x;
                     int sHeight = dimensions.y;
                     int exifOrientation = view.getExifOrientation(context, sourceUri);
@@ -1411,17 +1405,15 @@ public class SimpleScaleImageView extends View {
     private static class BitmapLoadTask extends AsyncTask<Void, Void, Integer> {
         private final WeakReference<SimpleScaleImageView> viewRef;
         private final WeakReference<Context> contextRef;
-        private final WeakReference<SkiaImageDecoder> skiaImageDecoderRef;
         private final Uri source;
         private final boolean preview;
         private final boolean isTop;
         private Bitmap bitmap;
         private Exception exception;
 
-        BitmapLoadTask(SimpleScaleImageView view, Context context, SkiaImageDecoder skiaImageDecoder, Uri source, boolean preview, boolean isTop) {
+        BitmapLoadTask(SimpleScaleImageView view, Context context, Uri source, boolean preview, boolean isTop) {
             this.viewRef = new WeakReference<>(view);
             this.contextRef = new WeakReference<>(context);
-            this.skiaImageDecoderRef = new WeakReference<>(skiaImageDecoder);
             this.source = source;
             this.preview = preview;
             this.isTop = isTop;
@@ -1432,11 +1424,33 @@ public class SimpleScaleImageView extends View {
             try {
                 String sourceUri = source.toString();
                 Context context = contextRef.get();
-                SkiaImageDecoder imageDecoder = skiaImageDecoderRef.get();
                 SimpleScaleImageView view = viewRef.get();
-                if (context != null && imageDecoder != null && view != null) {
+                if (context != null && view != null) {
 //                    view.debug("BitmapLoadTask.doInBackground");
-                    bitmap = imageDecoder.decode(context, source);
+                    String uriString = source.toString();
+                    BitmapFactory.Options options = new BitmapFactory.Options();
+                    options.inPreferredConfig = Bitmap.Config.RGB_565;
+                    Resources res;
+                    String packageName = source.getAuthority();
+                    if (context.getPackageName().equals(packageName)) {
+                        res = context.getResources();
+                    } else {
+                        PackageManager pm = context.getPackageManager();
+                        res = pm.getResourcesForApplication(packageName);
+                    }
+                    int id = 0;
+                    List<String> segments = source.getPathSegments();
+                    int size = segments.size();
+                    if (size == 2 && segments.get(0).equals("drawable")) {
+                        String resName = segments.get(1);
+                        id = res.getIdentifier(resName, "drawable", packageName);
+                    } else if (size == 1 && TextUtils.isDigitsOnly(segments.get(0))) {
+                        try {
+                            id = Integer.parseInt(segments.get(0));
+                        } catch (NumberFormatException ignored) {
+                        }
+                    }
+                    bitmap = BitmapFactory.decodeResource(context.getResources(), id, options);
                     return view.getExifOrientation(context, sourceUri);
                 }
             } catch (Exception e) {
@@ -1552,24 +1566,6 @@ public class SimpleScaleImageView extends View {
                 if (cursor != null) {
                     cursor.close();
                 }
-            }
-        } else if (sourceUri.startsWith(ImageSource.FILE_SCHEME) && !sourceUri.startsWith(ImageSource.ASSET_SCHEME)) {
-            try {
-                ExifInterface exifInterface = new ExifInterface(sourceUri.substring(ImageSource.FILE_SCHEME.length() - 1));
-                int orientationAttr = exifInterface.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL);
-                if (orientationAttr == ExifInterface.ORIENTATION_NORMAL || orientationAttr == ExifInterface.ORIENTATION_UNDEFINED) {
-                    exifOrientation = ORIENTATION_0;
-                } else if (orientationAttr == ExifInterface.ORIENTATION_ROTATE_90) {
-                    exifOrientation = ORIENTATION_90;
-                } else if (orientationAttr == ExifInterface.ORIENTATION_ROTATE_180) {
-                    exifOrientation = ORIENTATION_180;
-                } else if (orientationAttr == ExifInterface.ORIENTATION_ROTATE_270) {
-                    exifOrientation = ORIENTATION_270;
-                } else {
-                    Log.w(TAG, "Unsupported EXIF orientation: " + orientationAttr);
-                }
-            } catch (Exception e) {
-                Log.w(TAG, "Could not get EXIF orientation of image");
             }
         }
         return exifOrientation;
