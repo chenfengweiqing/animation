@@ -7,6 +7,7 @@
       <module fileurl="file://$PROJECT_DIR$/animation.iml" filepath="$PROJECT_DIR$/animation.iml" />
       <module fileurl="file://$PROJECT_DIR$/animationview/animationview.iml" filepath="$PROJECT_DIR$/animationview/animationview.iml" />
       <module fileurl="file://$PROJECT_DIR$/imageslide/imageslide.iml" filepath="$PROJECT_DIR$/imageslide/imageslide.iml" />
+      <module fileurl="file://$PROJECT_DIR$/sampleimageslide/sampleimageslide.iml" filepath="$PROJECT_DIR$/sampleimageslide/sampleimageslide.iml" />
     </modules>
   </component>
 </project>
