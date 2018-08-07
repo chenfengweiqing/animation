@@ -39,6 +39,10 @@ import android.view.ViewParent;
 
 import com.example.sampleimageslide.R.styleable;
 
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.InputStream;
 import java.lang.ref.WeakReference;
 import java.util.Arrays;
 import java.util.List;
@@ -180,8 +184,7 @@ public class SimpleScaleImageView extends View {
     private boolean bitmapIsCached;
 
     // Uri of full size image
-    private Uri uri;
-    private Uri topUri;
+    private int uri;
 
     // Sample size used to display the whole image when fully zoomed out
     private int fullImageSampleSize;
@@ -409,9 +412,8 @@ public class SimpleScaleImageView extends View {
      * Set the image source from a bitmap, resource, asset, file or other URI.
      */
     public final void setTopImage(@NonNull int resId) {
-        topUri = Uri.parse(ContentResolver.SCHEME_ANDROID_RESOURCE + "://" + getContext().getPackageName() + "/" + resId);
 //        debug("setTopImage  tile " + tile + " topUri " + topUri);
-        BitmapLoadTask task = new BitmapLoadTask(this, getContext(), topUri, false, true);
+        BitmapLoadTask task = new BitmapLoadTask(this, getContext(), resId, false, true);
         execute(task);
     }
 
@@ -438,7 +440,7 @@ public class SimpleScaleImageView extends View {
     public final void setImage(@NonNull int resId) {
         //noinspection ConstantConditions
         reset(true);
-        uri = Uri.parse(ContentResolver.SCHEME_ANDROID_RESOURCE + "://" + getContext().getPackageName() + "/" + resId);
+        uri = resId;
         TilesInitTask task = new TilesInitTask(this, getContext(), uri);
         execute(task);
     }
@@ -448,7 +450,7 @@ public class SimpleScaleImageView extends View {
      */
     private void reset(boolean newImage) {
 //        debug("reset newImage " + newImage);
-        scale = 0.6667f;
+        scale = 1.0f;
         scaleStart = 0f;
         vTranslate = null;
         vTranslateStart = null;
@@ -472,10 +474,13 @@ public class SimpleScaleImageView extends View {
         satTemp = null;
         matrix = null;
         sRect = null;
+        uri = 0;
         if (newImage) {
-            uri = null;
             if (bitmap != null && !bitmapIsCached) {
                 bitmap.recycle();
+            }
+            if (topBitmap != null) {
+                topBitmap.recycle();
             }
             if (bitmap != null && bitmapIsCached && onImageEventListener != null) {
                 onImageEventListener.onPreviewReleased();
@@ -1282,50 +1287,27 @@ public class SimpleScaleImageView extends View {
     private static class TilesInitTask extends AsyncTask<Void, Void, int[]> {
         private final WeakReference<SimpleScaleImageView> viewRef;
         private final WeakReference<Context> contextRef;
-        private final Uri source;
+        private final int resId;
         private Exception exception;
 
-        TilesInitTask(SimpleScaleImageView view, Context context, Uri source) {
+        TilesInitTask(SimpleScaleImageView view, Context context, int resId) {
             this.viewRef = new WeakReference<>(view);
             this.contextRef = new WeakReference<>(context);
-            this.source = source;
+            this.resId = resId;
         }
 
         @Override
         protected int[] doInBackground(Void... params) {
             try {
-                String sourceUri = source.toString();
                 Context context = contextRef.get();
                 SimpleScaleImageView view = viewRef.get();
                 if (context != null && view != null) {
 //                    view.debug("TilesInitTask.doInBackground");
-                    String uriString = source.toString();
-                    Resources res;
-                    String packageName = source.getAuthority();
-                    if (context.getPackageName().equals(packageName)) {
-                        res = context.getResources();
-                    } else {
-                        PackageManager pm = context.getPackageManager();
-                        res = pm.getResourcesForApplication(packageName);
-                    }
-
-                    int id = 0;
-                    List<String> segments = source.getPathSegments();
-                    int size = segments.size();
-                    if (size == 2 && segments.get(0).equals("drawable")) {
-                        String resName = segments.get(1);
-                        id = res.getIdentifier(resName, "drawable", packageName);
-                    } else if (size == 1 && TextUtils.isDigitsOnly(segments.get(0))) {
-                        try {
-                            id = Integer.parseInt(segments.get(0));
-                        } catch (NumberFormatException ignored) {
-                        }
-                    }
-                    BitmapRegionDecoder decoder = BitmapRegionDecoder.newInstance(context.getResources().openRawResource(id), false);
+                    BitmapRegionDecoder decoder = BitmapRegionDecoder.newInstance(context.getResources().openRawResource(resId), false);
                     Point dimensions = new Point(decoder.getWidth(), decoder.getHeight());
                     int sWidth = dimensions.x;
                     int sHeight = dimensions.y;
-                    int exifOrientation = view.getExifOrientation(context, sourceUri);
+                    int exifOrientation = view.getExifOrientation(context);
                     return new int[]{sWidth, sHeight, exifOrientation};
                 }
             } catch (Exception e) {
@@ -1405,16 +1387,16 @@ public class SimpleScaleImageView extends View {
     private static class BitmapLoadTask extends AsyncTask<Void, Void, Integer> {
         private final WeakReference<SimpleScaleImageView> viewRef;
         private final WeakReference<Context> contextRef;
-        private final Uri source;
+        private final int resId;
         private final boolean preview;
         private final boolean isTop;
         private Bitmap bitmap;
         private Exception exception;
 
-        BitmapLoadTask(SimpleScaleImageView view, Context context, Uri source, boolean preview, boolean isTop) {
+        BitmapLoadTask(SimpleScaleImageView view, Context context, int resId, boolean preview, boolean isTop) {
             this.viewRef = new WeakReference<>(view);
             this.contextRef = new WeakReference<>(context);
-            this.source = source;
+            this.resId = resId;
             this.preview = preview;
             this.isTop = isTop;
         }
@@ -1422,36 +1404,22 @@ public class SimpleScaleImageView extends View {
         @Override
         protected Integer doInBackground(Void... params) {
             try {
-                String sourceUri = source.toString();
                 Context context = contextRef.get();
                 SimpleScaleImageView view = viewRef.get();
                 if (context != null && view != null) {
 //                    view.debug("BitmapLoadTask.doInBackground");
-                    String uriString = source.toString();
+                    InputStream is = context.getResources().openRawResource(resId);
                     BitmapFactory.Options options = new BitmapFactory.Options();
+//                    options.inJustDecodeBounds = false;
+//                    options.inSampleSize = 10;
                     options.inPreferredConfig = Bitmap.Config.RGB_565;
-                    Resources res;
-                    String packageName = source.getAuthority();
-                    if (context.getPackageName().equals(packageName)) {
-                        res = context.getResources();
-                    } else {
-                        PackageManager pm = context.getPackageManager();
-                        res = pm.getResourcesForApplication(packageName);
+                    bitmap = BitmapFactory.decodeStream(is, null, options);
+                    try {
+                        is.close();
+                    } catch (IOException e) {
+                        e.printStackTrace();
                     }
-                    int id = 0;
-                    List<String> segments = source.getPathSegments();
-                    int size = segments.size();
-                    if (size == 2 && segments.get(0).equals("drawable")) {
-                        String resName = segments.get(1);
-                        id = res.getIdentifier(resName, "drawable", packageName);
-                    } else if (size == 1 && TextUtils.isDigitsOnly(segments.get(0))) {
-                        try {
-                            id = Integer.parseInt(segments.get(0));
-                        } catch (NumberFormatException ignored) {
-                        }
-                    }
-                    bitmap = BitmapFactory.decodeResource(context.getResources(), id, options);
-                    return view.getExifOrientation(context, sourceUri);
+                    return view.getExifOrientation(context);
                 }
             } catch (Exception e) {
                 Log.e(TAG, "Failed to load bitmap", e);
@@ -1543,31 +1511,8 @@ public class SimpleScaleImageView extends View {
      * This will only work for external files, not assets, resources or other URIs.
      */
     @AnyThread
-    private int getExifOrientation(Context context, String sourceUri) {
+    private int getExifOrientation(Context context) {
         int exifOrientation = ORIENTATION_0;
-        if (sourceUri.startsWith(ContentResolver.SCHEME_CONTENT)) {
-            Cursor cursor = null;
-            try {
-                String[] columns = {MediaStore.Images.Media.ORIENTATION};
-                cursor = context.getContentResolver().query(Uri.parse(sourceUri), columns, null, null, null);
-                if (cursor != null) {
-                    if (cursor.moveToFirst()) {
-                        int orientation = cursor.getInt(0);
-                        if (VALID_ORIENTATIONS.contains(orientation) && orientation != ORIENTATION_USE_EXIF) {
-                            exifOrientation = orientation;
-                        } else {
-                            Log.w(TAG, "Unsupported orientation: " + orientation);
-                        }
-                    }
-                }
-            } catch (Exception e) {
-                Log.w(TAG, "Could not get orientation of image from media store");
-            } finally {
-                if (cursor != null) {
-                    cursor.close();
-                }
-            }
-        }
         return exifOrientation;
     }
 
@@ -2455,7 +2400,7 @@ public class SimpleScaleImageView extends View {
      * @return If an image is currently set.
      */
     public boolean hasImage() {
-        return uri != null || bitmap != null;
+        return uri != 0 || bitmap != null;
     }
 
     /**

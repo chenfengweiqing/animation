@@ -17,8 +17,6 @@ public class MainActivity extends AppCompatActivity {
         mImageView = findViewById(R.id.imageView);
         mImageView.setTopImage(R.drawable.top);
         mImageView.setImage(R.drawable.city);
-        mImageView.setMaxScale(0.667f);
-        mImageView.setMinScale(0.667f);
         mImageView.setZoomEnabled(false);
         mImageView.setOnClickListener(new View.OnClickListener() {
             @Override
