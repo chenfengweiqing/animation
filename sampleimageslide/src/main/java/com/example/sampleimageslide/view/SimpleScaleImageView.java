@@ -1,11 +1,7 @@
 package com.example.sampleimageslide.view;
 
-import android.content.ContentResolver;
 import android.content.Context;
-import android.content.pm.PackageManager;
-import android.content.res.Resources;
 import android.content.res.TypedArray;
-import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.BitmapRegionDecoder;
@@ -18,16 +14,12 @@ import android.graphics.Point;
 import android.graphics.PointF;
 import android.graphics.Rect;
 import android.graphics.RectF;
-import android.media.ExifInterface;
-import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Handler;
 import android.os.Message;
-import android.provider.MediaStore;
 import android.support.annotation.AnyThread;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
-import android.text.TextUtils;
 import android.util.AttributeSet;
 import android.util.DisplayMetrics;
 import android.util.Log;
@@ -39,8 +31,6 @@ import android.view.ViewParent;
 
 import com.example.sampleimageslide.R.styleable;
 
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.ref.WeakReference;
@@ -176,6 +166,7 @@ public class SimpleScaleImageView extends View {
 
     // Bitmap (preview or full image)
     private Bitmap topBitmap;
+    private Bitmap bottomBitmap;
 
     // Whether the bitmap is a preview image
     private boolean bitmapIsPreview;
@@ -240,7 +231,6 @@ public class SimpleScaleImageView extends View {
     private PointF vTranslate;
     private PointF vTranslateStart;
     private PointF vTranslateBefore;
-    private int count = 1;
 
     // Source coordinate to center on, used when new position is set externally before view is ready
     private Float pendingScale;
@@ -252,6 +242,8 @@ public class SimpleScaleImageView extends View {
     private int sHeight;
     private int sTopWidth;
     private int sTopHeight;
+    private int sBottomWidth;
+    private int sBottomHeight;
     private int sOrientation;
 
     // Is two-finger zooming in progress
@@ -306,7 +298,6 @@ public class SimpleScaleImageView extends View {
 
     // Paint objects created once and reused for efficiency
     private Paint bitmapPaint;
-    private Paint topBitmapPaint;
     private Paint tileBgPaint;
     private Paint topTileBgPaint;
 
@@ -412,27 +403,17 @@ public class SimpleScaleImageView extends View {
      * Set the image source from a bitmap, resource, asset, file or other URI.
      */
     public final void setTopImage(@NonNull int resId) {
-//        debug("setTopImage  tile " + tile + " topUri " + topUri);
-        BitmapLoadTask task = new BitmapLoadTask(this, getContext(), resId, false, true);
+        BitmapLoadTask task = new BitmapLoadTask(this, getContext(), resId, false, LayerType.TOP);
         execute(task);
     }
 
     /**
-     * Called by worker task when full size image bitmap is ready (tiling is disabled).
+     * Set the image source from a bitmap, resource, asset, file or other URI.
      */
-    private synchronized void onTopImageLoaded(Bitmap bitmap, int sOrientation) {
-//        debug("onTopImageLoaded sTopWidth " + sTopWidth + " bitmap width " + bitmap.getWidth() + " sTopHeight " +
-//                sTopHeight + " bitmap height " + bitmap.getHeight() + " this.topBitmap " + this.topBitmap);
-        if (this.topBitmap != null) {
-            this.topBitmap.recycle();
-        }
-        this.topBitmap = bitmap;
-        this.sTopWidth = bitmap.getWidth();
-        this.sTopHeight = bitmap.getHeight();
-        invalidate();
-        requestLayout();
+    public final void setBottomImage(@NonNull int resId) {
+        BitmapLoadTask task = new BitmapLoadTask(this, getContext(), resId, false, LayerType.BOTTOM);
+        execute(task);
     }
-
 
     /**
      * Set the image source from a bitmap, resource, asset, file or other URI.
@@ -481,6 +462,9 @@ public class SimpleScaleImageView extends View {
             }
             if (topBitmap != null) {
                 topBitmap.recycle();
+            }
+            if (bottomBitmap != null) {
+                bottomBitmap.recycle();
             }
             if (bitmap != null && bitmapIsCached && onImageEventListener != null) {
                 onImageEventListener.onPreviewReleased();
@@ -916,9 +900,9 @@ public class SimpleScaleImageView extends View {
         // Set scale and translate before draw.
         preDraw();
 
-//        debug("onDraw anim  " + anim + " bitmap " + bitmap + " topBitmap " + topBitmap +
-//                " bitmapIsPreview  " + bitmapIsPreview + " matrix " + matrix + " tileBgPaint " + tileBgPaint + " topTileBgPaint " +
-//                topTileBgPaint + "  vTranslate " + vTranslate);
+        debug("onDraw anim  " + anim + " bitmap " + bitmap + " topBitmap " + topBitmap +
+                " bitmapIsPreview  " + bitmapIsPreview + " matrix " + matrix + " tileBgPaint " + tileBgPaint + " topTileBgPaint " +
+                topTileBgPaint + "  vTranslate " + vTranslate + " bottomBitmap " + bottomBitmap);
         // If animating scale, calculate current scale and center with easing equations
         if (anim != null && anim.vFocusStart != null) {
             // Store current values so we can send an event if they change
@@ -958,7 +942,38 @@ public class SimpleScaleImageView extends View {
         }
 
 //        debug(" isBaseLayerReady " + isBaseLayerReady());
+        if (bottomBitmap != null) {
+            float xScale = scale, yScale = scale;
+            if (bitmapIsPreview) {
+                xScale = scale * ((float) sBottomWidth / topBitmap.getWidth());
+                yScale = scale * ((float) sBottomHeight / topBitmap.getHeight());
+            }
 
+            if (matrix == null) {
+                matrix = new Matrix();
+            }
+            matrix.reset();
+            matrix.postScale(xScale, yScale);
+            matrix.postRotate(getRequiredRotation());
+            matrix.postTranslate(vTranslate.x * 0.3f, vTranslate.y * 0.3f);
+            if (getRequiredRotation() == ORIENTATION_180) {
+                matrix.postTranslate(scale * sWidth, scale * sHeight);
+            } else if (getRequiredRotation() == ORIENTATION_90) {
+                matrix.postTranslate(scale * sHeight, 0);
+            } else if (getRequiredRotation() == ORIENTATION_270) {
+                matrix.postTranslate(0, scale * sWidth);
+            }
+
+            if (topTileBgPaint != null) {
+                if (sTopRect == null) {
+                    sTopRect = new RectF();
+                }
+                sTopRect.set(0f, 0f, bitmapIsPreview ? bottomBitmap.getWidth() : sBottomWidth, bitmapIsPreview ? bottomBitmap.getHeight() : sBottomHeight);
+                matrix.mapRect(sTopRect);
+                canvas.drawRect(sTopRect, topTileBgPaint);
+            }
+            canvas.drawBitmap(bottomBitmap, matrix, bitmapPaint);
+        }
         if (bitmap != null) {
             float xScale = scale, yScale = scale;
             if (bitmapIsPreview) {
@@ -1007,11 +1022,8 @@ public class SimpleScaleImageView extends View {
             matrix.reset();
             matrix.postScale(xScale, yScale);
             matrix.postRotate(getRequiredRotation());
-            count++;
-            if (count > 10) {
-                count = 1;
-            }
-            matrix.postTranslate(vTranslate.x + 100 * count, vTranslate.y + 200);
+
+            matrix.postTranslate(vTranslate.x * 1.5f, vTranslate.y * 1.5f);
 
             if (getRequiredRotation() == ORIENTATION_180) {
                 matrix.postTranslate(scale * sWidth, scale * sHeight);
@@ -1029,7 +1041,7 @@ public class SimpleScaleImageView extends View {
                 matrix.mapRect(sTopRect);
                 canvas.drawRect(sTopRect, topTileBgPaint);
             }
-            canvas.drawBitmap(topBitmap, matrix, topBitmapPaint);
+            canvas.drawBitmap(topBitmap, matrix, bitmapPaint);
         }
     }
 
@@ -1104,13 +1116,6 @@ public class SimpleScaleImageView extends View {
             bitmapPaint.setFilterBitmap(true);
             bitmapPaint.setDither(true);
         }
-        if (topBitmapPaint == null) {
-            topBitmapPaint = new Paint();
-            topBitmapPaint.setAntiAlias(true);
-            topBitmapPaint.setFilterBitmap(true);
-            topBitmapPaint.setDither(true);
-            topBitmapPaint.setAlpha(100);
-        }
     }
 
     /**
@@ -1134,7 +1139,7 @@ public class SimpleScaleImageView extends View {
             // Whole image is required at native resolution, and is smaller than the canvas max bitmap size.
             // Use BitmapDecoder for better image support.
             initialiseBaseLayer = true;
-            BitmapLoadTask task = new BitmapLoadTask(this, getContext(), uri, false, false);
+            BitmapLoadTask task = new BitmapLoadTask(this, getContext(), uri, false, LayerType.CENTER);
             execute(task);
         }
     }
@@ -1389,16 +1394,16 @@ public class SimpleScaleImageView extends View {
         private final WeakReference<Context> contextRef;
         private final int resId;
         private final boolean preview;
-        private final boolean isTop;
+        private final int index;
         private Bitmap bitmap;
         private Exception exception;
 
-        BitmapLoadTask(SimpleScaleImageView view, Context context, int resId, boolean preview, boolean isTop) {
+        BitmapLoadTask(SimpleScaleImageView view, Context context, int resId, boolean preview, int index) {
             this.viewRef = new WeakReference<>(view);
             this.contextRef = new WeakReference<>(context);
             this.resId = resId;
             this.preview = preview;
-            this.isTop = isTop;
+            this.index = index;
         }
 
         @Override
@@ -1413,7 +1418,10 @@ public class SimpleScaleImageView extends View {
 //                    options.inJustDecodeBounds = false;
 //                    options.inSampleSize = 10;
                     options.inPreferredConfig = Bitmap.Config.RGB_565;
+                    options.inMutable = true;
                     bitmap = BitmapFactory.decodeStream(is, null, options);
+                    int by = bitmap.getAllocationByteCount();
+                    Log.d(TAG, "doInBackground: by " + by);
                     try {
                         is.close();
                     } catch (IOException e) {
@@ -1439,11 +1447,7 @@ public class SimpleScaleImageView extends View {
                     if (preview) {
                         subSamplingScaleImageView.onPreviewLoaded(bitmap);
                     } else {
-                        if (isTop) {
-                            subSamplingScaleImageView.onTopImageLoaded(bitmap, orientation);
-                        } else {
-                            subSamplingScaleImageView.onImageLoaded(bitmap, orientation, false);
-                        }
+                        subSamplingScaleImageView.onImageLoaded(bitmap, orientation, false, index);
                     }
                 } else if (exception != null && subSamplingScaleImageView.onImageEventListener != null) {
                     if (preview) {
@@ -1454,6 +1458,12 @@ public class SimpleScaleImageView extends View {
                 }
             }
         }
+    }
+
+    interface LayerType {
+        int BOTTOM = 1;
+        int CENTER = 2;
+        int TOP = 3;
     }
 
     /**
@@ -1476,33 +1486,61 @@ public class SimpleScaleImageView extends View {
     /**
      * Called by worker task when full size image bitmap is ready (tiling is disabled).
      */
-    private synchronized void onImageLoaded(Bitmap bitmap, int sOrientation, boolean bitmapIsCached) {
+    private synchronized void onImageLoaded(Bitmap bitmap, int sOrientation, boolean bitmapIsCached, int index) {
 //        debug("onImageLoaded sWidth " + sWidth + " bitmap width " + bitmap.getWidth() + " sHeight " +
 //                sHeight + " bitmap height " + bitmap.getHeight() + " this.bitmap " + this.bitmap + " bitmapIsCached " + this.bitmapIsCached);
 //        // If actual dimensions don't match the declared size, reset everything.
-        if (this.sWidth > 0 && this.sHeight > 0 && (this.sWidth != bitmap.getWidth() || this.sHeight != bitmap.getHeight())) {
-            reset(false);
-        }
-        if (this.bitmap != null && !this.bitmapIsCached) {
-            this.bitmap.recycle();
-        }
 
-        if (this.bitmap != null && this.bitmapIsCached && onImageEventListener != null) {
-            onImageEventListener.onPreviewReleased();
-        }
 
-        this.bitmapIsPreview = false;
-        this.bitmapIsCached = bitmapIsCached;
-        this.bitmap = bitmap;
-        this.sWidth = bitmap.getWidth();
-        this.sHeight = bitmap.getHeight();
-        this.sOrientation = sOrientation;
-        boolean ready = checkReady();
-        boolean imageLoaded = checkImageLoaded();
+        switch (index) {
+            case LayerType.BOTTOM:
+                if (this.bottomBitmap != null) {
+                    this.bottomBitmap.recycle();
+                }
+                this.bottomBitmap = bitmap;
+                this.sBottomWidth = bitmap.getWidth();
+                this.sBottomHeight = bitmap.getHeight();
+                invalidate();
+                requestLayout();
+                break;
+            case LayerType.CENTER:
+                if (this.sWidth > 0 && this.sHeight > 0 && (this.sWidth != bitmap.getWidth() || this.sHeight != bitmap.getHeight())) {
+                    reset(false);
+                }
+                if (this.bitmap != null && !this.bitmapIsCached) {
+                    this.bitmap.recycle();
+                }
+
+                if (this.bitmap != null && this.bitmapIsCached && onImageEventListener != null) {
+                    onImageEventListener.onPreviewReleased();
+                }
+
+                this.bitmapIsPreview = false;
+                this.bitmapIsCached = bitmapIsCached;
+                this.bitmap = bitmap;
+                this.sWidth = bitmap.getWidth();
+                this.sHeight = bitmap.getHeight();
+                this.sOrientation = sOrientation;
+                boolean ready = checkReady();
+                boolean imageLoaded = checkImageLoaded();
 //        debug("onImageLoaded  ready " + ready + " imageLoaded " + imageLoaded);
-        if (ready || imageLoaded) {
-            invalidate();
-            requestLayout();
+                if (ready || imageLoaded) {
+                    invalidate();
+                    requestLayout();
+                }
+                break;
+            case LayerType.TOP:
+                if (this.topBitmap != null) {
+                    this.topBitmap.recycle();
+                }
+                this.topBitmap = bitmap;
+                this.sTopWidth = bitmap.getWidth();
+                this.sTopHeight = bitmap.getHeight();
+                invalidate();
+                requestLayout();
+                break;
+            default:
+                break;
         }
     }
 
@@ -1652,7 +1690,6 @@ public class SimpleScaleImageView extends View {
         bitmapPaint = null;
         tileBgPaint = null;
         topTileBgPaint = null;
-        topBitmapPaint = null;
     }
 
     /**

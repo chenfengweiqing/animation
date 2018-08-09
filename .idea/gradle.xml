@@ -13,6 +13,7 @@
             <option value="$PROJECT_DIR$/animationview" />
             <option value="$PROJECT_DIR$/imageslide" />
             <option value="$PROJECT_DIR$/sampleimageslide" />
+            <option value="$PROJECT_DIR$/scollertest" />
           </set>
         </option>
         <option name="resolveModulePerSourceSet" value="false" />

@@ -1,1 +1,1 @@
-include ':ActivityAnimation', ':anima', ':animationview', ':imageslide', ':sampleimageslide'
+include ':ActivityAnimation', ':anima', ':animationview', ':imageslide', ':sampleimageslide', ':scollertest'
