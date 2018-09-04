@@ -187,10 +187,10 @@ public class SimpleScaleImageView extends View {
     private int orientation = ORIENTATION_0;
 
     // Max scale allowed (prevent infinite zoom)
-    private float maxScale = 2F;
+    private float maxScale = 0.73f;
 
     // Min scale allowed (prevent infinite zoom)
-    private float minScale = minScale();
+    private float minScale = 0.73f;
 
     // Density to reach before loading higher resolution tiles
     private int minimumTileDpi = -1;
@@ -431,7 +431,7 @@ public class SimpleScaleImageView extends View {
      */
     private void reset(boolean newImage) {
 //        debug("reset newImage " + newImage);
-        scale = 1.0f;
+        scale = 0.73f;
         scaleStart = 0f;
         vTranslate = null;
         vTranslateStart = null;

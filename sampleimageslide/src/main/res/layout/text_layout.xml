@@ -12,7 +12,8 @@
             android:layout_width="1365dp"
             android:layout_height="533dp"
             android:scaleType="fitXY"
-            android:src="@drawable/city" />
+            android:src="@drawable/bottom"
+            android:visibility="gone"/>
 
         <RelativeLayout
             android:layout_width="1707dp"
@@ -22,7 +23,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:scaleType="fitXY"
-                android:src="@drawable/top" />
+                android:src="@drawable/center" />
 
             <ImageView
                 android:id="@+id/music"
@@ -41,6 +42,8 @@
             android:layout_width="853dp"
             android:layout_height="533dp"
             android:scaleType="fitXY"
+            android:src="@drawable/top"
+            android:visibility="gone"
             />
 
     </com.example.sampleimageslide.view.ScrollerLayout>

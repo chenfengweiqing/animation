@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <com.example.sampleimageslide.view.ScrollerLayout
+        android:id="@+id/scrollView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <ImageView
+            android:layout_width="1365dp"
+            android:layout_height="533dp"
+            android:scaleType="fitXY"
+            android:src="@drawable/city" />
+
+        <RelativeLayout
+            android:layout_width="1707dp"
+            android:layout_height="533dp">
+
+            <ImageView
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="fitXY"
+                android:src="@drawable/city" />
+
+            <ImageView
+                android:id="@+id/music"
+                android:layout_width="268dp"
+                android:layout_height="268dp"
+                android:layout_alignParentBottom="true"
+                android:layout_alignParentRight="true"
+                android:layout_marginBottom="67dp"
+                android:layout_marginRight="50dp"
+                android:scaleType="centerInside"
+                android:src="@drawable/anim_laoding" />
+
+        </RelativeLayout>
+
+        <ImageView
+            android:layout_width="853dp"
+            android:layout_height="533dp"
+            android:scaleType="fitXY"
+            android:src="@drawable/city"
+            android:visibility="gone"
+            />
+
+    </com.example.sampleimageslide.view.ScrollerLayout>
+</RelativeLayout>
